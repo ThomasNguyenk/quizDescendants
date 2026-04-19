@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 
-// --- VARIABLES D'ÉTAT ---
+// --- ÉTATS DU QUIZ ---
 const questions = ref([]);
 const currentIndex = ref(0);
 const score = ref(0);
@@ -14,21 +14,24 @@ const feedbackType = ref('');
 let timerInterval = null;
 
 // --- LOGIQUE AUDIO ---
-// Musique orchestrale épique libre de droits
-const audio = new Audio('https://www.chosic.com/wp-content/uploads/2021/07/The-Epic-Hero-Epic-Music.mp3');
+// Le chemin '/' pointe directement vers le dossier 'public'
+const audio = new Audio('/music.mp3');
 audio.loop = true;
-audio.volume = 0.3; // Volume doux à 30%
+audio.volume = 0.4;
 const isMuted = ref(false);
-
-const playMusic = () => {
-  if (!isMuted.value) {
-    audio.play().catch(e => console.log("L'audio attend une interaction utilisateur."));
-  }
-};
 
 const toggleMute = () => {
   isMuted.value = !isMuted.value;
   audio.muted = isMuted.value;
+};
+
+// Fonction pour débloquer l'audio (Contourne la restriction navigateur)
+const unlockAudio = () => {
+  if (audio.paused && !isMuted.value) {
+    audio.play().catch(e => {
+      console.log("Lecture auto bloquée, en attente d'un clic...");
+    });
+  }
 };
 
 // --- LOGIQUE DU QUIZ ---
@@ -59,8 +62,8 @@ const submitAnswer = () => {
     return;
   }
 
-  // On lance la musique au premier clic si elle ne s'est pas lancée
-  playMusic();
+  // On tente de lancer la musique au premier clic sur "Submit" au cas où
+  unlockAudio();
 
   clearInterval(timerInterval);
 
@@ -96,32 +99,42 @@ const restartQuiz = () => {
 };
 
 onMounted(async () => {
+  // 1. Récupération des questions sur le backend
   try {
     const response = await axios.get('http://localhost:3000/api/questions');
     questions.value = response.data;
     startTimer();
   } catch (error) {
-    console.error("Error fetching quiz data:", error);
+    console.error("Erreur : Le serveur Backend (port 3000) ne répond pas !");
   }
+
+  // 2. Débloquer l'audio dès que l'utilisateur clique n'importe où sur la page
+  window.addEventListener('click', unlockAudio, { once: true });
 });
 </script>
 
 <template>
   <div class="quiz-page">
     <div class="audio-controls">
-      <button @click="toggleMute" class="mute-btn">
+      <button @click="toggleMute" class="mute-btn" title="Couper/Activer le son">
         {{ isMuted ? '🔇' : '🔊' }}
       </button>
     </div>
 
     <div class="header-container">
       <h1>Descendants Quiz</h1>
-      <h4 v-if="!quizFinished">Question {{ currentIndex + 1 }} / {{ questions.length }}</h4>
+      <h4 v-if="!quizFinished && questions.length">
+        Question {{ currentIndex + 1 }} sur {{ questions.length }}
+      </h4>
     </div>
 
     <div class="container">
-      <div v-if="!quizFinished && currentQuestion">
-        <div class="timer">Time Remaining: {{ timeLeft }}s</div>
+      <div v-if="questions.length === 0" class="status-msg">
+        Connexion au serveur en cours...
+      </div>
+
+      <div v-else-if="!quizFinished && currentQuestion">
+        <div class="timer">Temps restant : {{ timeLeft }}s</div>
 
         <div class="quiz-box">
           <div class="question">{{ currentQuestion.question }}</div>
@@ -130,7 +143,7 @@ onMounted(async () => {
             <div v-for="(option, index) in currentQuestion.options" :key="index" class="choice">
               <label>
                 <input type="radio" :value="option" v-model="selectedAnswer" />
-                {{ option }}
+                <span>{{ option }}</span>
               </label>
             </div>
           </div>
@@ -140,27 +153,27 @@ onMounted(async () => {
           </div>
 
           <button @click="submitAnswer" :disabled="feedback !== ''" class="btn-submit">
-            Submit Answer
+            Valider la réponse
           </button>
         </div>
       </div>
 
       <div v-else-if="quizFinished" class="final-results">
-        <h2>Quiz Completed!</h2>
-        <div class="score-display">Your Score: {{ score }} / {{ questions.length }}</div>
-        <button @click="restartQuiz" class="btn-submit">Restart Quiz</button>
+        <h2>Quiz terminé !</h2>
+        <div class="score-display">{{ score }} / {{ questions.length }}</div>
+        <button @click="restartQuiz" class="btn-submit">Recommencer</button>
       </div>
     </div>
   </div>
 </template>
 
 <style>
-/* Reset */
+/* Reset global */
 body, html {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: 'Arial', sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .quiz-page {
@@ -170,6 +183,7 @@ body, html {
   flex-direction: column;
   align-items: center;
   padding: 40px 20px;
+  /* Fond d'écran */
   background-image: url('https://www.wallpaperuse.com/wallp/42-421718_m.jpg');
   background-size: cover;
   background-position: center;
@@ -180,129 +194,79 @@ body, html {
   position: absolute;
   top: 20px;
   right: 20px;
-  z-index: 10;
+  z-index: 100;
 }
 
 .mute-btn {
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   color: white;
-  border: 2px solid #fff;
+  border: 2px solid #ffffff;
   border-radius: 50%;
   width: 50px;
   height: 50px;
-  font-size: 1.5rem;
   cursor: pointer;
+  font-size: 1.3em;
   transition: transform 0.2s;
 }
-
 .mute-btn:hover { transform: scale(1.1); }
 
 .header-container h1 {
   font-size: 4em;
-  font-weight: bold;
+  font-weight: 900;
   background: linear-gradient(to right, #ff0000, #2b00ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin-bottom: 0;
+  margin: 0;
+  filter: drop-shadow(2px 2px 5px rgba(0,0,0,0.5));
 }
 
-.header-container h4 {
-  color: white;
-  text-align: center;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-}
+.header-container h4 { color: white; text-align: center; font-size: 1.2em; }
 
 .container {
   width: 100%;
-  max-width: 700px;
-  background: rgba(0, 0, 0, 0.75);
-  padding: 40px;
+  max-width: 600px;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 30px;
   border-radius: 20px;
-  box-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
-  color: white;
   margin-top: 20px;
-  backdrop-filter: blur(5px);
+  color: white;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  backdrop-filter: blur(10px);
 }
 
-.timer {
-  font-size: 1.8em;
-  text-align: center;
-  color: #ffeb3b;
-  margin-bottom: 25px;
-  font-weight: bold;
-}
+.timer { color: #ffeb3b; font-size: 1.6em; text-align: center; margin-bottom: 20px; font-weight: bold; }
+.question { font-size: 1.8em; text-align: center; margin-bottom: 25px; line-height: 1.3; }
 
-.question {
-  font-size: 2em;
-  margin-bottom: 30px;
-  text-align: center;
-  line-height: 1.2;
-}
-
-.choices {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  margin-bottom: 30px;
-}
-
+.choices { display: flex; flex-direction: column; gap: 15px; }
 .choice {
   background: rgba(255, 255, 255, 0.1);
   padding: 15px;
-  border-radius: 10px;
-  transition: background 0.3s;
-  cursor: pointer;
+  border-radius: 12px;
+  transition: background 0.3s, transform 0.2s;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.choice:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(5px);
 }
 
-.choice:hover { background: rgba(255, 255, 255, 0.2); }
-
-.choice label {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-input[type="radio"] {
-  margin-right: 15px;
-  transform: scale(1.5);
-}
+.choice label { display: flex; align-items: center; cursor: pointer; width: 100%; }
+input[type="radio"] { margin-right: 15px; transform: scale(1.5); cursor: pointer; }
 
 .btn-submit {
-  display: block;
-  width: 250px;
-  margin: 0 auto;
-  padding: 15px;
+  display: block; width: 100%; max-width: 280px; margin: 30px auto 0;
+  padding: 15px; border-radius: 50px; border: none;
   background: linear-gradient(45deg, #4caf50, #2e7d32);
-  color: white;
-  border: none;
-  border-radius: 50px;
-  font-size: 1.2em;
-  font-weight: bold;
-  cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  color: white; font-size: 1.2em; font-weight: bold; cursor: pointer;
+  transition: 0.3s;
 }
+.btn-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4); }
+.btn-submit:disabled { background: #555; cursor: not-allowed; opacity: 0.7; }
 
-.btn-submit:disabled {
-  background: #555;
-  cursor: not-allowed;
-}
-
-.result-msg {
-  text-align: center;
-  font-size: 1.5em;
-  margin-bottom: 20px;
-  padding: 10px;
-  border-radius: 10px;
-}
-
+.result-msg { text-align: center; margin-top: 20px; font-weight: bold; font-size: 1.2em; padding: 10px; border-radius: 10px; }
 .success { color: #4caf50; background: rgba(76, 175, 80, 0.1); }
 .error { color: #f44336; background: rgba(244, 67, 54, 0.1); }
 
-.score-display {
-  font-size: 4em;
-  text-align: center;
-  margin: 30px 0;
-  color: #ffeb3b;
-}
+.score-display { font-size: 5em; text-align: center; color: #ffeb3b; margin: 20px 0; font-weight: bold; }
+.status-msg { text-align: center; font-style: italic; color: #888; }
 </style>
