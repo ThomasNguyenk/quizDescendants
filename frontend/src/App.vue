@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 
+// --- VARIABLES D'ÉTAT ---
 const questions = ref([]);
 const currentIndex = ref(0);
 const score = ref(0);
@@ -12,6 +13,25 @@ const feedback = ref('');
 const feedbackType = ref('');
 let timerInterval = null;
 
+// --- LOGIQUE AUDIO ---
+// Musique orchestrale épique libre de droits
+const audio = new Audio('https://www.chosic.com/wp-content/uploads/2021/07/The-Epic-Hero-Epic-Music.mp3');
+audio.loop = true;
+audio.volume = 0.3; // Volume doux à 30%
+const isMuted = ref(false);
+
+const playMusic = () => {
+  if (!isMuted.value) {
+    audio.play().catch(e => console.log("L'audio attend une interaction utilisateur."));
+  }
+};
+
+const toggleMute = () => {
+  isMuted.value = !isMuted.value;
+  audio.muted = isMuted.value;
+};
+
+// --- LOGIQUE DU QUIZ ---
 const currentQuestion = computed(() => questions.value[currentIndex.value]);
 
 const startTimer = () => {
@@ -21,11 +41,16 @@ const startTimer = () => {
     if (timeLeft.value > 0) {
       timeLeft.value--;
     } else {
-      feedback.value = "Time's up!";
-      feedbackType.value = 'error';
-      setTimeout(nextQuestion, 2000);
+      handleTimeout();
     }
   }, 1000);
+};
+
+const handleTimeout = () => {
+  clearInterval(timerInterval);
+  feedback.value = "Time's up!";
+  feedbackType.value = 'error';
+  setTimeout(nextQuestion, 2000);
 };
 
 const submitAnswer = () => {
@@ -33,7 +58,12 @@ const submitAnswer = () => {
     alert("Please select an answer!");
     return;
   }
+
+  // On lance la musique au premier clic si elle ne s'est pas lancée
+  playMusic();
+
   clearInterval(timerInterval);
+
   if (selectedAnswer.value === currentQuestion.value.correctAnswer) {
     score.value++;
     feedback.value = "Correct Answer!";
@@ -42,6 +72,7 @@ const submitAnswer = () => {
     feedback.value = `Wrong! The correct answer was: ${currentQuestion.value.correctAnswer}`;
     feedbackType.value = 'error';
   }
+
   setTimeout(nextQuestion, 2000);
 };
 
@@ -77,39 +108,59 @@ onMounted(async () => {
 
 <template>
   <div class="quiz-page">
+    <div class="audio-controls">
+      <button @click="toggleMute" class="mute-btn">
+        {{ isMuted ? '🔇' : '🔊' }}
+      </button>
+    </div>
+
     <div class="header-container">
       <h1>Descendants Quiz</h1>
-      <h4>Question {{ currentIndex + 1 }} / {{ questions.length }}</h4>
+      <h4 v-if="!quizFinished">Question {{ currentIndex + 1 }} / {{ questions.length }}</h4>
     </div>
+
     <div class="container">
       <div v-if="!quizFinished && currentQuestion">
-        <div class="timer">Time: {{ timeLeft }}s</div>
+        <div class="timer">Time Remaining: {{ timeLeft }}s</div>
+
         <div class="quiz-box">
           <div class="question">{{ currentQuestion.question }}</div>
+
           <div class="choices">
             <div v-for="(option, index) in currentQuestion.options" :key="index" class="choice">
-              <label><input type="radio" :value="option" v-model="selectedAnswer" /> {{ option }}</label>
+              <label>
+                <input type="radio" :value="option" v-model="selectedAnswer" />
+                {{ option }}
+              </label>
             </div>
           </div>
-          <div v-if="feedback" :class="['result-msg', feedbackType]">{{ feedback }}</div>
-          <button @click="submitAnswer" :disabled="feedback !== ''">Submit</button>
+
+          <div v-if="feedback" :class="['result-msg', feedbackType]">
+            {{ feedback }}
+          </div>
+
+          <button @click="submitAnswer" :disabled="feedback !== ''" class="btn-submit">
+            Submit Answer
+          </button>
         </div>
       </div>
+
       <div v-else-if="quizFinished" class="final-results">
-        <h2>Finished!</h2>
-        <div class="score">Score: {{ score }} / {{ questions.length }}</div>
-        <button @click="restartQuiz">Restart</button>
+        <h2>Quiz Completed!</h2>
+        <div class="score-display">Your Score: {{ score }} / {{ questions.length }}</div>
+        <button @click="restartQuiz" class="btn-submit">Restart Quiz</button>
       </div>
     </div>
   </div>
 </template>
 
 <style>
-/* Reset de base pour que le fond prenne tout l'écran */
+/* Reset */
 body, html {
   margin: 0;
   padding: 0;
   height: 100%;
+  font-family: 'Arial', sans-serif;
 }
 
 .quiz-page {
@@ -119,55 +170,139 @@ body, html {
   flex-direction: column;
   align-items: center;
   padding: 40px 20px;
-
-  /* --- AJOUT DU FOND D'ÉCRAN ICI --- */
   background-image: url('https://www.wallpaperuse.com/wallp/42-421718_m.jpg');
-  background-size: cover; /* L'image couvre tout l'écran sans se déformer */
-  background-position: center; /* Centre l'image */
-  background-repeat: no-repeat; /* Ne pas répéter l'image */
-  background-attachment: fixed; /* Le fond reste fixe quand on scrolle (optionnel mais joli) */
-  /* ---------------------------------- */
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
-/* Le reste de ton CSS pour que le texte soit lisible sur le fond */
-.header-container h1, .header-container h4 {
-  text-align: center;
+.audio-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+}
+
+.mute-btn {
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.mute-btn:hover { transform: scale(1.1); }
+
+.header-container h1 {
+  font-size: 4em;
+  font-weight: bold;
   background: linear-gradient(to right, #ff0000, #2b00ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin: 10px 0;
+  margin-bottom: 0;
 }
 
-h1 { font-size: 3em; font-weight: bold; }
+.header-container h4 {
+  color: white;
+  text-align: center;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+}
 
 .container {
   width: 100%;
-  max-width: 800px;
-  background: rgba(0, 0, 0, 0.7); /* Fond semi-transparent pour le quiz box */
-  padding: 30px;
-  border-radius: 15px;
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+  max-width: 700px;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
   color: white;
   margin-top: 20px;
+  backdrop-filter: blur(5px);
 }
 
-.timer { font-size: 1.5em; text-align: center; color: #ffeb3b; margin-bottom: 20px; }
-.question { font-size: 1.8em; font-weight: bold; text-align: center; margin-bottom: 30px; color: white; }
-.choices { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; }
-.choice { background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 8px; font-size: 1.2em; }
+.timer {
+  font-size: 1.8em;
+  text-align: center;
+  color: #ffeb3b;
+  margin-bottom: 25px;
+  font-weight: bold;
+}
+
+.question {
+  font-size: 2em;
+  margin-bottom: 30px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.choice {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 15px;
+  border-radius: 10px;
+  transition: background 0.3s;
+  cursor: pointer;
+}
+
 .choice:hover { background: rgba(255, 255, 255, 0.2); }
-input[type="radio"] { margin-right: 15px; transform: scale(1.3); }
 
-button {
-  display: block; width: 200px; margin: 0 auto; padding: 12px;
-  background-color: #4caf50; color: white; border: none; border-radius: 5px;
-  font-size: 1.1em; font-weight: bold; cursor: pointer;
+.choice label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
-button:hover:not(:disabled) { background-color: #45a049; }
-button:disabled { background-color: #888; cursor: not-allowed; }
-.result-msg { text-align: center; font-size: 1.4em; margin-bottom: 20px; }
-.success { color: #4caf50; }
-.error { color: #f44336; }
-.final-results { text-align: center; }
-.score { font-size: 3em; margin: 20px 0; }
+
+input[type="radio"] {
+  margin-right: 15px;
+  transform: scale(1.5);
+}
+
+.btn-submit {
+  display: block;
+  width: 250px;
+  margin: 0 auto;
+  padding: 15px;
+  background: linear-gradient(45deg, #4caf50, #2e7d32);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-size: 1.2em;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+.btn-submit:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+.result-msg {
+  text-align: center;
+  font-size: 1.5em;
+  margin-bottom: 20px;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.success { color: #4caf50; background: rgba(76, 175, 80, 0.1); }
+.error { color: #f44336; background: rgba(244, 67, 54, 0.1); }
+
+.score-display {
+  font-size: 4em;
+  text-align: center;
+  margin: 30px 0;
+  color: #ffeb3b;
+}
 </style>
